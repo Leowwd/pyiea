@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+# reproduce/: downloaded data, run caches and per-run fronts (seeded and reproducible)
+reproduce/data/
+reproduce/results/*_fronts.json.gz

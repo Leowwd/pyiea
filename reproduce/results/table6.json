@@ -1,0 +1,146 @@
+{
+  "f1": {
+    "mean": 121.40257745122757,
+    "min": 120.83102733114498,
+    "max": 121.53923919593153,
+    "std": 0.15620647847726427,
+    "calls_mean": 9970.4,
+    "proposals_mean": 10136.166666666666,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f2": {
+    "mean": 159.9116392275999,
+    "min": 153.5263012438353,
+    "max": 166.6222316974345,
+    "std": 3.8621702596570495,
+    "calls_mean": 9966.366666666667,
+    "proposals_mean": 10131.3,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f3": {
+    "mean": 355.2,
+    "min": 155.0,
+    "max": 948.0,
+    "std": 184.9151877663559,
+    "calls_mean": 9975.0,
+    "proposals_mean": 10141.8,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f4": {
+    "mean": 153.69722160456422,
+    "min": 125.8496216650068,
+    "max": 190.45772355517397,
+    "std": 16.146041969623116,
+    "calls_mean": 9971.0,
+    "proposals_mean": 10139.3,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f5": {
+    "mean": 0.6788519018839094,
+    "min": 0.21151290943681422,
+    "max": 1.2591580923223324,
+    "std": 0.2995050032615905,
+    "calls_mean": 9973.433333333332,
+    "proposals_mean": 10136.066666666668,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f6": {
+    "mean": 159.3448153676132,
+    "min": 149.69920627090343,
+    "max": 165.82736608558778,
+    "std": 3.3304402940538256,
+    "calls_mean": 9969.866666666667,
+    "proposals_mean": 10141.8,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f7": {
+    "mean": 0.17339883704565245,
+    "min": 0.12088556329990964,
+    "max": 0.2668557982269019,
+    "std": 0.0298554706330966,
+    "calls_mean": 9974.633333333333,
+    "proposals_mean": 10143.533333333333,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f8": {
+    "mean": 8.823896769556354,
+    "min": 7.997750372346362,
+    "max": 10.0822471049688,
+    "std": 0.4658813818125222,
+    "calls_mean": 9964.633333333333,
+    "proposals_mean": 10151.666666666666,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f9": {
+    "mean": 7000.926221622304,
+    "min": 5299.00734556761,
+    "max": 8418.276491596225,
+    "std": 717.0370173406392,
+    "calls_mean": 9973.833333333334,
+    "proposals_mean": 10122.166666666666,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f10": {
+    "mean": 1226.3313920288172,
+    "min": 893.789833408752,
+    "max": 1664.9102081059898,
+    "std": 195.2737026836347,
+    "calls_mean": 9969.933333333332,
+    "proposals_mean": 10129.8,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f11": {
+    "mean": 46.233333333333334,
+    "min": 37.0,
+    "max": 67.0,
+    "std": 5.953617014517776,
+    "calls_mean": 9974.066666666668,
+    "proposals_mean": 10156.533333333333,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  },
+  "f12": {
+    "mean": 6.381918692078827,
+    "min": 3.278778696979347,
+    "max": 12.432900638036598,
+    "std": 1.8002421074625168,
+    "calls_mean": 9972.166666666666,
+    "proposals_mean": 10120.5,
+    "runs": 30,
+    "stop_reasons": [
+      "budget_exhausted"
+    ]
+  }
+}

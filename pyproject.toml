@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling>=1.27"]  # 1.27 is the first to write PEP 639 license metadata
+build-backend = "hatchling.build"
+
+[project]
+name = "pyiea"
+version = "0.2.0"
+description = "Intelligent evolutionary algorithms (IEA, IMOEA) with the intelligent gene collector, after Ho, Shu & Chen (2004)"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "leowwd", email = "liaoleo12@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+keywords = ["evolutionary algorithm", "genetic algorithm", "orthogonal array", "multi-objective optimization", "IEA", "IMOEA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.10", "build>=1.2", "twine>=5"]
+
+[project.urls]
+Repository = "https://github.com/Leowwd/pyiea"
+Documentation = "https://github.com/Leowwd/pyiea/blob/main/README.md"
+Changelog = "https://github.com/Leowwd/pyiea/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Leowwd/pyiea/issues"
+Paper = "https://doi.org/10.1109/TEVC.2004.835176"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/pyiea", "tests", "examples", "docs", "README.md", "CHANGELOG.md", "LICENSE"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyiea"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src/pyiea"]
+addopts = "--doctest-modules --strict-markers"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["pyiea"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "\\.\\.\\.$"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "D", "PT", "C4", "BLE", "S"]
+ignore = [
+    "D105", "D107", "D102", "D103", "D205", "D212", "D415", "D200", "D401",
+    "N806", "N803",   # math-style names (P, Q, D, Y, S) follow the paper's notation
+    "S101",           # asserts are used for invariants
+    "S311",           # numpy Generators are not used for cryptography
+    "RUF022",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "S", "N802", "B023", "B905", "PT018"]  # compact multi-part asserts read better in tests
+"examples/*" = ["D", "S"]
+
+[tool.mypy]
+strict = true
+files = ["src/pyiea"]
