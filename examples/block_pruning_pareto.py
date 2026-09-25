@@ -29,7 +29,7 @@ def objectives(keep: pyiea.Genome) -> tuple[float, float]:
 
 
 if __name__ == "__main__":
-    res = pyiea.optimize(objectives, n_bits=N_UNITS, mode="multi_objective", n_objectives=2, max_calls=3000, seed=0)
+    res = pyiea.optimize(objectives, n_bits=N_UNITS, n_objectives=2, max_calls=3000, seed=0)
     front = sorted(res.archive, key=lambda item: item[1][1])
     print(f"{len(front)} non-dominated pruning plans ({res.accounting['objective_calls']:.0f} calls)")
     for keep, (d, r) in front[:: max(1, len(front) // 8)]:

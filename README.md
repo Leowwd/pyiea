@@ -1,13 +1,13 @@
 # pyiea
 
-Intelligent evolutionary algorithms for binary search spaces, following
+Intelligent evolutionary algorithms for bit strings and real-valued parameters, with one objective or several, following
 
 > S.-Y. Ho, L.-S. Shu, J.-H. Chen, "Intelligent Evolutionary Algorithms for Large Parameter
 > Optimization Problems," *IEEE Transactions on Evolutionary Computation* 8(6):522–541, 2004.
 > [doi:10.1109/TEVC.2004.835176](https://doi.org/10.1109/TEVC.2004.835176)
 
-- **IEA** (`mode="single_objective"`): a population loop with truncation selection, IGC recombination and elitist mutation.
-- **IMOEA** (`mode="multi_objective"`): GPSIFF fitness, a bounded elite set, and a separate archive of every non-dominated solution found.
+- **IEA**, for one objective: a population loop with truncation selection, IGC recombination and elitist mutation.
+- **IMOEA**, for two or more objectives: GPSIFF fitness, a bounded elite set, and a separate archive of every non-dominated solution found. It returns a Pareto front.
 - **IGC**, the intelligent gene collector. It splits two parents into gene segments, evaluates a two-level orthogonal array of segment combinations, and builds children from the main effects.
 
 Every objective call is counted: OA rows, child confirmations, cache hits and failures. Runs are reproducible from a seed and can be checkpointed and resumed exactly.
@@ -30,14 +30,33 @@ The only runtime dependency is NumPy. Python ≥ 3.10 is required.
 
 ## Quick start
 
-A fitness function takes a genome, which is a read-only `numpy.uint8` array of 0/1 values. It returns a float, or a sequence of floats when there are several objectives. **Everything is minimized**, so negate anything you want to maximize.
+**Everything is minimized**, so negate anything you want to maximize.
 
-The running example is block pruning of a 16-layer decoder. Bit `2i` keeps the attention of layer `i` and bit `2i+1` keeps its MLP (1 = keep, 0 = drop). Which sub-blocks can go?
+### Real-valued parameters
+
+Give the bounds of each parameter. The fitness receives a float array:
 
 ```python
 import numpy as np
 import pyiea
 
+
+def sphere(x):
+    return float(((x - 1.5) ** 2).sum())
+
+
+res = pyiea.optimize(sphere, bounds=[(-5.0, 5.0)] * 3, max_calls=3000)
+print(res)  # IEAResult(best=..., best_x=[1.5 1.5 1.5], stop_reason=..., objective_calls=...)
+print(res.best_x, res.best)
+```
+
+Each parameter is encoded with `bits=10` bits by default (use more for finer resolution) and Gray-coded, as the paper's benchmarks need (see [Encoding real parameters](#encoding-real-parameters)).
+
+### Bit strings
+
+With `n_bits` (or a `problem`), the fitness receives a read-only `numpy.uint8` array of 0/1 values. The running example is block pruning of a 16-layer decoder: bit `2i` keeps the attention of layer `i` and bit `2i+1` keeps its MLP (1 = keep, 0 = drop). Which sub-blocks can go?
+
+```python
 rng = np.random.default_rng(0)
 importance = rng.uniform(0.2, 1.0, 32)  # toy stand-in for the KL increase of dropping each sub-block
 
@@ -52,7 +71,9 @@ print(res.best, np.flatnonzero(res.best_genome == 0), res.stop_reason)
 print(res.accounting)  # objective_calls, cache_hits, failed_evaluations, wall_seconds, ...
 ```
 
-To trade distortion against size, return both objectives and use IMOEA. The result is a Pareto front of pruning plans:
+### Several objectives
+
+Return one value per objective and pass `n_objectives`; pyiea then runs IMOEA and returns a Pareto front. To trade distortion against size:
 
 ```python
 sizes = np.tile([10_487_808, 50_333_696], 16)  # attention / MLP parameters (Llama-3.2-1B)
@@ -62,10 +83,14 @@ def objectives(keep):
     return distortion(keep), float(sizes @ keep / sizes.sum())
 
 
-res = pyiea.optimize(objectives, n_bits=32, mode="multi_objective", n_objectives=2, max_calls=3000)
+res = pyiea.optimize(objectives, n_bits=32, n_objectives=2, max_calls=3000)
+print(res)  # IMOEAResult(front=... points, archive=... points, ...)
+F = res.archive_objectives  # one row (distortion, size) per non-dominated plan found
 for keep, (d, r) in sorted(res.archive, key=lambda item: item[1][1]):
     ...
 ```
+
+`res.front` is the bounded elite set of the last generation; `res.archive` keeps every non-dominated solution found. With `bounds`, `res.front_x` holds the real parameters of the front.
 
 `examples/` holds runnable versions of these, plus a custom search space in which some sub-blocks are protected.
 
@@ -91,21 +116,37 @@ For another constraint, subclass `BinaryProblem` and override:
 
 Every OA combination built from `divide` must be legal. `examples/protected_blocks.py` shows a problem in which the first and last layers can never be dropped.
 
-## Real-valued parameters
+## Encoding real parameters
 
-The paper encodes each continuous parameter as a fixed number of bits. Use Gray code
-(`gray=True`) so that neighbouring values are one bit apart, and `enc.problem()` so that
-IGC never cuts through a parameter:
+As in the paper, each real parameter is a fixed number of bits: `x = low + k (high - low) / (2^bits - 1)` for the integer `k` the bits encode. `optimize(bounds=...)` does this for you. Gray code (the default, `gray=True`) makes neighbouring values one bit apart, so mutation can fine-tune a converged population. With plain binary, pyiea does not reach the paper's single-objective results (`docs/paper_map.md`). IGC never cuts through a parameter.
+
+To maximize, minimize the negation. For example, the paper's Table IV asks to maximize f1(x) = −Σ [sin(xᵢ) + sin(2xᵢ/3)] on [3, 13], whose maximum is 1.21598 per parameter. That means minimizing Σ [sin(xᵢ) + sin(2xᵢ/3)]:
 
 ```python
-def f1(x):  # Table IV, f1: maximize sum(sin(x) + sin(2x/3)) on [3, 13]
-    return -float((np.sin(x) + np.sin(2 * x / 3)).sum())
+def minus_f1(x):
+    return float((np.sin(x) + np.sin(2 * x / 3)).sum())
 
 
-enc = pyiea.RealEncoder([(3.0, 13.0)] * 10, bits=10, gray=True)  # 10 parameters x 10 bits
-res = pyiea.optimize(enc.wrap(f1), problem=enc.problem(), max_calls=10_000)
-x_best = enc.decode(res.best_genome)
+res = pyiea.optimize(minus_f1, bounds=[(3.0, 13.0)] * 10, bits=10, max_calls=10_000)
+print(-res.best)  # f1 ≈ 12.16 = 1.21598 × 10
 ```
+
+`pyiea.RealEncoder` is the same encoding for the lower-level API: `enc.wrap(f)` is the objective on genomes, `enc.problem()` the search space and `enc.decode(genome)` the parameters.
+
+## Troubleshooting
+
+| Message | Cause and fix |
+|---|---|
+| `the objective returned 2 values for a genome, but n_objectives=1` | The fitness returns several objectives. Pass `n_objectives=2` to run IMOEA. |
+| `... returned 1 value ..., but n_objectives=2` | Return one value per objective, e.g. `return distortion, size`. |
+| `EvaluationError: the objective failed on all 30 genomes of the initial population; the first failure was ...` | The fitness raised (or returned NaN/inf) for every genome. The message quotes the first error, so fix that and rerun. pyiea stops right away instead of spending the budget. |
+| `... assignment destination is read-only` | Genomes are read-only so that parents cannot change. Work on `g.copy()`. |
+| `workers > 1 needs a picklable objective` | Worker processes cannot receive lambdas or closures. Use a module-level function or a class instance. |
+| `stop_reason='stalled'` | No new genome was evaluated for `max_stall_generations` generations, which usually means the search space is exhausted. |
+
+Occasional failures are normal: they are counted in `res.accounting["failed_evaluations"]` and never count as good fitness.
+
+To follow a long run, turn on the log: `logging.basicConfig(); logging.getLogger("pyiea").setLevel(logging.DEBUG)` prints one line per generation.
 
 ## Lower-level API
 

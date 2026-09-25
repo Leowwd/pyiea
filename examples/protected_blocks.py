@@ -46,7 +46,7 @@ def objectives(keep: pyiea.Genome) -> tuple[float, float]:
 
 if __name__ == "__main__":
     problem = ProtectedBlocksProblem(N_UNITS, PROTECTED)
-    res = pyiea.optimize(objectives, problem=problem, mode="multi_objective", max_calls=2000, seed=0)
+    res = pyiea.optimize(objectives, problem=problem, n_objectives=2, max_calls=2000, seed=0)
     kept = all(bool(np.all(g[problem.protected] == 1)) for g, _ in res.archive)
     print(f"{len(res.archive)} pruning plans; protected sub-blocks always kept: {kept}")
     print(f"infeasible candidates evaluated: {res.accounting['invalid_candidates']:.0f}")
