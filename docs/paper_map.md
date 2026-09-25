@@ -188,5 +188,7 @@ Results (`reproduce/results/imoea_zdt.md`; 30 runs per case, 25 000 calls each):
 
 - **Stall stop:** `max_stall_generations` (default 50) stops a run after that many generations without a new objective call. This keeps a fully cached search space from looping. The baselines use the same rule.
 - **Resume:** the kind, seed, algorithm parameters and evaluator context must match the checkpoint; the stopping conditions may differ, so that a run can be extended (`checkpoint.STOPPING_FIELDS`).
+- **Fail fast:** if the objective fails (exception, NaN or inf, or an invalid genome) on every genome of the initial population, IEA and IMOEA raise `EvaluationError` with the first failure, instead of spending the budget on failures. Occasional failures still just count as failed evaluations (`test_fitness_failing_everywhere_fails_fast_with_the_first_error`).
+- **Objective count:** an objective that returns a different number of values than `n_objectives` is a usage error and raises `ValueError` at once (`test_wrong_number_of_objectives_is_a_clear_error`).
 - **Budget:** an IGC that does not fit the remaining call budget returns `status="budget"` without evaluating anything, and the run stops (`BudgetExhaustedError` is the low-level signal).
 - `*.crossover`: uniform crossover. Only the vanilla GA and NSGA-II **baselines** use it; IEA and IMOEA never do.

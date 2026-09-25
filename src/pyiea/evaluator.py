@@ -24,7 +24,7 @@ from typing import Any, TypeAlias
 
 import numpy as np
 
-from .exceptions import BudgetExhaustedError, CheckpointError
+from .exceptions import BudgetExhaustedError, CheckpointError, EvaluationError
 from .problem import Genome
 
 __all__ = ["COUNTERS", "EvalResult", "Evaluator", "Objective", "genome_hash", "genome_key"]
@@ -88,6 +88,15 @@ def _worker_call(genome: Genome) -> tuple[Any, str, float]:
     return _call(_WORKER_OBJECTIVE, genome)
 
 
+def _objective_count_message(got: int, expected: int) -> str:
+    msg = f"the objective returned {got} value{'s' if got != 1 else ''} for a genome, but n_objectives={expected}."
+    if expected == 1:
+        return msg + f" For {got} objectives use IMOEA, e.g. pyiea.optimize(..., n_objectives={got})."
+    if got == 1:
+        return msg + " Return one value per objective, e.g. `return distortion, size`."
+    return msg + f" Pass n_objectives={got}, or return {expected} values."
+
+
 def genome_key(g: Genome) -> bytes:
     """Cache key of a genome."""
     return g.tobytes()
@@ -143,6 +152,7 @@ class Evaluator:
         self._elapsed_before = 0.0
         self._t0 = time.perf_counter()
         self._pool: ProcessPoolExecutor | None = None
+        self._first_failure: str | None = None  # why the earliest failed or invalid candidate failed
 
     def __enter__(self) -> Evaluator:
         return self
@@ -195,6 +205,7 @@ class Evaluator:
             if k in self.cache or k in todo_keys:
                 continue
             if self.is_valid is not None and not self.is_valid(g):
+                self._first_failure = self._first_failure or "an invalid genome (rejected by is_valid)"
                 self.cache[k] = EvalResult(None, "invalid")
                 self.counters["invalid_candidates"] += 1
                 self.counters["unique_candidates"] += 1
@@ -208,7 +219,11 @@ class Evaluator:
                 raise BudgetExhaustedError(f"batch needs {len(todo)} objective calls, {room} left")
             todo = todo[: int(room)]
         for (k, g), (y, status, sec) in zip(todo, self._run([g for _, g in todo]), strict=True):
+            if isinstance(y, tuple) and len(y) != self.n_objectives:
+                raise ValueError(_objective_count_message(len(y), self.n_objectives))
             ok = status == "ok"
+            if not ok and self._first_failure is None:
+                self._first_failure = f"{y}" if isinstance(y, str) else f"a non-finite value {y}"
             self.cache[k] = EvalResult(y if ok else None, status, sec)
             self.counters["objective_calls"] += 1
             self.counters["unique_candidates"] += 1
@@ -235,6 +250,25 @@ class Evaluator:
             new.discard(k)  # a later duplicate in the same batch is a hit
             out.append(r)
         return out
+
+    def raise_if_all_failed(self, n_genomes: int) -> None:
+        """Raise :class:`~pyiea.EvaluationError` if any candidate failed; call it when none succeeded.
+
+        IEA and IMOEA call this when no genome of the initial population has a
+        valid objective. Without any failure (for example a zero budget) it does nothing.
+        """
+        if self._first_failure is None:
+            return
+        reason = self._first_failure
+        hint = (
+            " Genomes are read-only; work on a copy (g.copy()) if the objective needs to change one."
+            if "read-only" in reason
+            else ""
+        )
+        raise EvaluationError(
+            f"the objective failed on all {n_genomes} genomes of the initial population; "
+            f"the first failure was {reason}.{hint}"
+        )
 
     def _run(self, genomes: list[Genome]) -> list[tuple[Any, str, float]]:
         if self.workers <= 1 or len(genomes) <= 1:

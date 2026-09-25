@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["BudgetExhaustedError", "CheckpointError", "PyIEAError"]
+__all__ = ["BudgetExhaustedError", "CheckpointError", "EvaluationError", "PyIEAError"]
 
 
 class PyIEAError(Exception):
@@ -18,3 +18,12 @@ class BudgetExhaustedError(PyIEAError):
 
 class CheckpointError(PyIEAError):
     """A checkpoint does not belong to this optimizer, configuration, seed or evaluator context."""
+
+
+class EvaluationError(PyIEAError):
+    """The objective failed on every genome of the initial population.
+
+    Raised by :class:`pyiea.IEA` and :class:`pyiea.IMOEA` right after the first
+    evaluation, instead of spending the whole budget on failures. The message
+    quotes the first error the objective raised or the first invalid genome.
+    """

@@ -20,8 +20,16 @@ versions may change the public API.
 - `reproduce/iea_fig3.py`, which reruns Fig. 3 (dist(D) for f1–f12, D = 10…100, 30 runs) for IEA against OEGA, TEGA and UEGA, plus an ablation with pm = 1/n_bits for the GAs.
 - `reproduce/iea_f8_f12.py`, which tests explanations for the open f8/f12 differences from Tables V and VI. The f12 values at D = 10 match a `cos(x_i)/sqrt(i)` Griewank. f8 at D = 100 stays unresolved.
 - `benchmarks.ZDT`: ZDT1–ZDT6 of Zitzler, Deb & Thiele (2000) for the IMOEA experiments (eq. 10). It covers any number of parameters `m`, real parameters through `RealEncoder` (binary or Gray), ZDT5 on its bit string, and the analytic Pareto-optimal fronts.
+- `optimize(fitness, bounds=[(low, high), ...], bits=10, gray=True)` optimizes real-valued parameters in one call: the fitness receives a float array, and `IEAResult.best_x` / `IMOEAResult.front_x` hold the decoded parameters (`encoder` holds the `RealEncoder`).
+- `IMOEAResult.front_objectives` and `archive_objectives`: the objective vectors as `(n_points, n_objectives)` arrays.
+- `EvaluationError`: IEA and IMOEA stop right after the initial population if the objective failed on every genome, and the message quotes the first failure (with a hint when the objective wrote into a read-only genome).
 
 ### Changed
+- `optimize()` infers IEA or IMOEA from `n_objectives` (`optimize(f, n_bits=32, n_objectives=2)` runs IMOEA); `mode=` still works. An `IMOEAConfig` alone also selects IMOEA, where it used to raise `TypeError`.
+- The `Evaluator` raises `ValueError` when the objective returns a different number of values than `n_objectives`; before, extra values were silently ignored or a missing one was accepted.
+- `optimize()` rejects an `n_bits` that disagrees with `problem.n_bits`, and error messages name the fix.
+- `IEAResult` and `IMOEAResult` print one line (best value or front size, stop reason, calls) instead of the full genomes.
+- README: real-valued quick start, a troubleshooting table, and a corrected f1 example (Table IV maximizes −Σ[sin x + sin(2x/3)]; the old example minimized it).
 - `PaperBenchmark.encoder()` now uses Gray code. With it, Table III and Section V-A match the paper (see `docs/paper_map.md`).
 
 ### Performance

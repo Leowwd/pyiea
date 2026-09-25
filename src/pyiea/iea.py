@@ -9,8 +9,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from .checkpoint import algorithm_config, load_checkpoint, save_checkpoint
+from .encoding import RealEncoder
 from .evaluator import Evaluator, Objectives
 from .exceptions import CheckpointError
 from .igc import igc
@@ -81,6 +83,7 @@ class IEAResult:
         pop_best: Best objective in the population after each evaluation step.
         igc_log: One trace per IGC operation.
         accounting: Evaluator counters, wall time and summed objective time.
+        encoder: The :class:`RealEncoder` of a run over real parameters (``optimize(bounds=...)``).
     """
 
     best_genome: Genome | None
@@ -91,6 +94,23 @@ class IEAResult:
     pop_best: list[float] = field(repr=False)
     igc_log: list[dict[str, Any]] = field(repr=False)
     accounting: dict[str, float] = field(repr=False)
+    encoder: RealEncoder | None = field(default=None, repr=False)
+
+    @property
+    def best_x(self) -> npt.NDArray[np.float64] | None:
+        """Real parameters of ``best_genome`` for a run over real parameters, else ``None``."""
+        if self.encoder is None or self.best_genome is None:
+            return None
+        return self.encoder.decode(self.best_genome)
+
+    def __repr__(self) -> str:
+        found = "no valid evaluation" if self.best is None else f"best={self.best:.6g}"
+        where = f", best_x={np.array2string(self.best_x, precision=4, threshold=8)}" if self.best_x is not None else ""
+        calls = int(self.accounting.get("objective_calls", 0))
+        return (
+            f"IEAResult({found}{where}, stop_reason={self.stop_reason!r}, "
+            f"generations={self.generations}, objective_calls={calls})"
+        )
 
 
 class IEA:
@@ -207,6 +227,8 @@ class IEA:
                 if cfg.checkpoint_every and checkpoint_path and self.gen % cfg.checkpoint_every == 0:
                     save_checkpoint(checkpoint_path, self.state_dict())
                 complete = self._evaluate_population()  # Step 2
+                if self.gen == 0 and self.best is None:
+                    self.evaluator.raise_if_all_failed(len(self.pop))  # fail fast instead of burning the budget
                 self.pop_best.append(min(map(self._key, range(cfg.pop_size))))
                 self._calls_log.append(self.evaluator.counters["objective_calls"])
                 logger.debug(

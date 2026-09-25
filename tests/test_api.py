@@ -51,7 +51,8 @@ def test_optimize_with_custom_problem():
         ({}, ValueError),  # neither n_bits nor problem
         ({"n_bits": 4, "max_calls": None}, ValueError),  # no stopping condition
         ({"n_bits": 4, "mode": "pareto"}, ValueError),
-        ({"n_bits": 4, "config": pyiea.IMOEAConfig()}, TypeError),
+        ({"n_bits": 4, "n_objectives": 1, "config": pyiea.IMOEAConfig()}, TypeError),
+        ({"n_bits": 4, "config": pyiea.IMOEAConfig()}, ValueError),  # IMOEA, but the fitness returns one value
         ({"n_bits": 4, "mode": "multi_objective", "config": pyiea.IEAConfig()}, TypeError),
     ],
 )

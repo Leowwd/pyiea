@@ -11,6 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .checkpoint import algorithm_config, load_checkpoint, save_checkpoint
+from .encoding import RealEncoder
 from .evaluator import Evaluator, Objectives
 from .exceptions import CheckpointError
 from .iea import _check_probability
@@ -79,6 +80,7 @@ class IMOEAResult:
         igc_log: One trace per IGC operation.
         accounting: Evaluator counters, wall time and summed objective time.
         archive_bytes: Memory held by archived genomes.
+        encoder: The :class:`RealEncoder` of a run over real parameters (``optimize(bounds=...)``).
     """
 
     front: list[Individual]
@@ -89,6 +91,36 @@ class IMOEAResult:
     igc_log: list[dict[str, Any]] = field(default_factory=list, repr=False)
     accounting: dict[str, float] = field(default_factory=dict, repr=False)
     archive_bytes: int = 0
+    encoder: RealEncoder | None = field(default=None, repr=False)
+
+    @property
+    def front_objectives(self) -> npt.NDArray[np.float64]:
+        """Objective vectors of ``front`` as an ``(n_points, n_objectives)`` array, in the same order."""
+        return _objectives_array(self.front)
+
+    @property
+    def archive_objectives(self) -> npt.NDArray[np.float64]:
+        """Objective vectors of ``archive`` as an ``(n_points, n_objectives)`` array, in the same order."""
+        return _objectives_array(self.archive)
+
+    @property
+    def front_x(self) -> npt.NDArray[np.float64] | None:
+        """Real parameters of every ``front`` genome, one row each, for a run over real parameters."""
+        if self.encoder is None:
+            return None
+        return np.array([self.encoder.decode(g) for g, _ in self.front]).reshape(len(self.front), -1)
+
+    def __repr__(self) -> str:
+        calls = int(self.accounting.get("objective_calls", 0))
+        return (
+            f"IMOEAResult(front={len(self.front)} points, archive={len(self.archive)} points, "
+            f"stop_reason={self.stop_reason!r}, generations={self.generations}, objective_calls={calls})"
+        )
+
+
+def _objectives_array(items: list[Individual]) -> npt.NDArray[np.float64]:
+    out: npt.NDArray[np.float64] = np.array([y for _, y in items], dtype=float).reshape(len(items), -1)
+    return out
 
 
 class IMOEA:
@@ -208,6 +240,8 @@ class IMOEA:
                 if cfg.checkpoint_every and checkpoint_path and self.gen % cfg.checkpoint_every == 0:
                     save_checkpoint(checkpoint_path, self.state_dict())
                 complete = self._evaluate_population()  # Step 2 (GPSIFF is computed where used, Step 4)
+                if self.gen == 0 and all(y is None for y in self.pop_y):
+                    ev.raise_if_all_failed(len(self.pop))  # fail fast instead of burning the budget
                 self._update_elite()  # Step 3
                 self._calls_log.append(ev.counters["objective_calls"])
                 self.history.append(

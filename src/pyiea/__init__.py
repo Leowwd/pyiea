@@ -1,11 +1,13 @@
 """pyiea: IEA and IMOEA with the intelligent gene collector (IGC).
 
 Implements Ho, Shu, Chen (2004), "Intelligent Evolutionary Algorithms for Large
-Parameter Optimization Problems", IEEE TEVC 8(6):522-541, for binary genomes:
+Parameter Optimization Problems", IEEE TEVC 8(6):522-541, for bit strings and
+(through a fixed-point encoding) real-valued parameters:
 
-* :class:`IEA`: single-objective mode.
-* :class:`IMOEA`: multi-objective mode with GPSIFF fitness and elite sets.
-* :func:`optimize`: one-call entry point.
+* :func:`optimize`: one-call entry point, e.g. ``optimize(f, bounds=[(0, 1)] * 5)``
+  or ``optimize(f, n_bits=32, n_objectives=2)``.
+* :class:`IEA`: one objective.
+* :class:`IMOEA`: several objectives, with GPSIFF fitness, elite sets and a Pareto archive.
 
 All objectives are minimized.
 """
@@ -19,7 +21,7 @@ from .api import optimize
 from .checkpoint import load_checkpoint, save_checkpoint
 from .encoding import ParameterProblem, RealEncoder
 from .evaluator import EvalResult, Evaluator, Objective
-from .exceptions import BudgetExhaustedError, CheckpointError, PyIEAError
+from .exceptions import BudgetExhaustedError, CheckpointError, EvaluationError, PyIEAError
 from .iea import IEA, IEAConfig, IEAResult
 from .igc import IGCResult, igc
 from .imoea import IMOEA, IMOEAConfig, IMOEAResult
@@ -41,6 +43,7 @@ __all__ = [
     "BudgetExhaustedError",
     "CheckpointError",
     "EvalResult",
+    "EvaluationError",
     "Evaluator",
     "FixedCardinalityProblem",
     "Genome",
