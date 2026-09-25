@@ -13,6 +13,10 @@ Methods, all with N_eval = 25 000 objective calls:
   nsga2   baseline: pyiea.baselines.nsga2 with N_pop 100 and pc 0.8 (the [26] settings quoted by the
           paper) and pm = 1 / n_bits. The paper quotes pm = 0.1, which as a per-bit rate would flip
           about 189 of 1 890 bits per child; uniform crossover.
+  nsga2_pm0.1      baseline check: the same with the quoted pm = 0.1 read literally, per bit.
+  nsga2_pm0.1var   baseline check: the quoted pm = 0.1 read per parameter, i.e. 0.1 / 30 per bit (about
+                   0.1 flipped bits per parameter). ZDT5: 0.1 / 5 per bit.
+  The two checks test whether the paper's weaker NSGA-II (Figs. 9 and 11) comes from its settings.
 Encodings (ablation; the paper does not state one): ``binary`` and ``gray`` for ZDT1-4 and 6, and
 ``bits`` for ZDT5.
 
@@ -50,7 +54,13 @@ RUNS_FILE = HERE / "data" / "imoea_zdt_runs.jsonl"
 M, BITS, N_EVAL = 63, 30, 25_000
 IMOEA_CFG = {"pop_size": 30, "elite_capacity": 30, "ps": 0.2, "pc": 0.6, "pm": 0.01, "max_segments": M}
 NSGA2_CFG = {"pop_size": 100, "pc": 0.8}  # pm = 1 / n_bits (the nsga2 default)
-METHODS = ("imoea", "nsga2")
+# pm of the NSGA-II variants; None is the nsga2 default 1 / n_bits. ZDT5's x2..x63 have 5 bits, not BITS.
+NSGA2_PM: dict[str, Any] = {
+    "nsga2": None,
+    "nsga2_pm0.1": lambda problem: 0.1,
+    "nsga2_pm0.1var": lambda problem: 0.1 / (5 if problem == "zdt5" else BITS),
+}
+METHODS = ("imoea", *NSGA2_PM)
 # Hypervolume reference points: about the objective values of a uniformly random genome, so that any front
 # better than random sampling has a positive hypervolume (engineering choice, fixed before the runs).
 REF = {
@@ -92,8 +102,9 @@ def run_one(problem: str, encoding: str, method: str, seed: int) -> dict[str, An
     t0 = time.perf_counter()
     if method == "imoea":
         res = pyiea.IMOEA(space, ev, pyiea.IMOEAConfig(**IMOEA_CFG), seed).optimize()
-    elif method == "nsga2":
-        res = baselines.nsga2(space, ev, seed, **NSGA2_CFG)
+    elif method in NSGA2_PM:
+        pm = NSGA2_PM[method]
+        res = baselines.nsga2(space, ev, seed, **NSGA2_CFG, pm=None if pm is None else pm(problem))
     else:
         raise ValueError(f"unknown method {method!r}")
     seconds = time.perf_counter() - t0
@@ -136,6 +147,8 @@ def summarize(cache_: RunCache, problems: list[str], methods: list[str], runs: i
             "n_eval": N_EVAL,
             "imoea": IMOEA_CFG,
             "nsga2": {**NSGA2_CFG, "pm": "1/n_bits"},
+            "nsga2_pm0.1": {**NSGA2_CFG, "pm": 0.1},
+            "nsga2_pm0.1var": {**NSGA2_CFG, "pm": "0.1/bits per parameter"},
             "hv_ref": REF,
         },
         "cases": {},
@@ -165,12 +178,10 @@ def summarize(cache_: RunCache, problems: list[str], methods: list[str], runs: i
                     },
                 }
                 fronts.setdefault(case, {})[m] = {"runs": [r["front"] for r in rs], "merged": merged.tolist()}
-            if "imoea" in rows and "nsga2" in rows:
-                fa, fb = fronts[case]["imoea"]["runs"], fronts[case]["nsga2"]["runs"]
-                info["cover"] = {
-                    "C(imoea,nsga2)": quartiles(cover_paired(fa, fb)),
-                    "C(nsga2,imoea)": quartiles(cover_paired(fb, fa)),
-                }
+            for b in (m for m in NSGA2_PM if m in rows and "imoea" in rows):
+                fa, fb = fronts[case]["imoea"]["runs"], fronts[case][b]["runs"]
+                info["cover"][f"C(imoea,{b})"] = quartiles(cover_paired(fa, fb))
+                info["cover"][f"C({b},imoea)"] = quartiles(cover_paired(fb, fa))
             summary["cases"][case] = info
         if {f"{p}/binary", f"{p}/gray"} <= fronts.keys() and all(
             "imoea" in fronts[f"{p}/{e}"] for e in ("binary", "gray")

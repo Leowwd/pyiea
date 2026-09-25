@@ -7,6 +7,9 @@ versions may change the public API.
 
 ## [Unreleased]
 
+### Added
+- `reproduce/imoea_zdt.py` runs two more NSGA-II baselines, `nsga2_pm0.1` and `nsga2_pm0.1var`, with the paper's quoted pm = 0.1 read per bit and per parameter, and reports the cover metric of IMOEA against each.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
