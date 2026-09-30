@@ -40,6 +40,9 @@ class IEAConfig:
         max_segments: ``None`` uses the paper's division size; an integer caps it
             (the ``bounded_segments`` variant, which must be reported as such).
         step10: Use IGC's optional elitist Step 10.
+        igc: ``False`` skips Step 4 (the intelligent gene collector): selection, elitism and mutation are
+            unchanged but no parents are recombined. This is an ablation, an IEA-based variant that must not
+            be reported as IEA. ``pc`` is still validated and is then unused.
         max_generations: Stop after this many generations.
         target: Stop once the best objective is ``<= target``.
         max_stall_generations: Stop after this many generations without a new
@@ -53,6 +56,7 @@ class IEAConfig:
     pm: float = 0.05
     max_segments: int | None = None
     step10: bool = True
+    igc: bool = True
     max_generations: int | None = None
     target: float | None = None
     max_stall_generations: int = 50
@@ -248,7 +252,12 @@ class IEA:
                 self.pop, self.pop_y = [self.pop[i] for i in idx], [self.pop_y[i] for i in idx]  # [0] = I_best
 
                 # Step 4: pc*Npop parents including I_best, which is parent 1 of the first pair
-                chosen = [0, *self.rng.choice(np.arange(1, cfg.pop_size), n_parents - 1, replace=False).tolist()]
+                # (skipped in the igc=False ablation, which then draws no parents either)
+                chosen = (
+                    [0, *self.rng.choice(np.arange(1, cfg.pop_size), n_parents - 1, replace=False).tolist()]
+                    if cfg.igc
+                    else []
+                )
                 for a, b in zip(chosen[0::2], chosen[1::2], strict=True):
                     ya, yb = self.pop_y[a], self.pop_y[b]
                     if ya is None or yb is None:

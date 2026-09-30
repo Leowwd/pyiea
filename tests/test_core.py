@@ -258,6 +258,38 @@ def test_igc_refuses_a_too_large_oa_without_holding_it():
     assert peak < 10e6
 
 
+def test_igc_false_never_calls_igc_and_true_does(monkeypatch):
+    """The ablation must really skip Step 4: observe the calls, not just the output."""
+    import pyiea.iea as iea_module
+
+    seen = {"n": 0}
+    real = iea_module.igc
+
+    def counting(*a, **k):
+        seen["n"] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(iea_module, "igc", counting)
+    P = ic.FixedCardinalityProblem(32, 10)
+
+    def run(igc):
+        ev = _ev(CountingObjective(), max_calls=150)
+        return ic.IEA(P, ev, ic.IEAConfig(pop_size=10, pm=0.1, igc=igc), seed=1).optimize()
+
+    on = run(True)
+    assert seen["n"] > 0 and len(on.igc_log) == seen["n"]
+    seen["n"] = 0
+    off = run(False)
+    assert seen["n"] == 0 and off.igc_log == []
+    assert ic.IEAConfig().igc is True
+    # the rest of the loop still runs: elitist selection + swap mutation, exact cardinality, within budget
+    assert off.generations > 0 and 10 < off.accounting["objective_calls"] <= 150
+    bests = [h["best"] for h in off.history]
+    assert bests == sorted(bests, reverse=True) and int(off.best_genome.sum()) == 10
+    # a different search from the IGC one: no OA rows were ever evaluated
+    assert on.accounting["objective_calls"] != off.accounting["objective_calls"] or on.best != off.best
+
+
 def test_exceptions_and_nonfinite_are_failures():
     def f(g):
         if g[0]:
