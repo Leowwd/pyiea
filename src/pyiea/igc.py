@@ -100,15 +100,20 @@ def igc(
     if len(segments) < 2:
         return IGCResult("not_divisible", parents, trace={"M": len(diff)})
     oa = generate_oa(len(segments))  # Step 3
-    rows = [decode(p1, p2, segments, r) for r in oa]  # Step 4
     trace: dict[str, Any] = {
         "M": len(diff),
         "N": len(segments),
         "n_rows": len(oa),
         "calls_before": evaluator.counters["objective_calls"],
     }
-    if not evaluator.can_afford(evaluator.n_uncached(rows) + 2):
+    # Step 4, priced before it is built: with many segments the OA has thousands of rows, each a full genome, and
+    # holding them all before the budget check can exceed memory. Rows are decoded one at a time and the count
+    # stops once it passes the calls left.
+    if not evaluator.can_afford(
+        evaluator.n_uncached((decode(p1, p2, segments, r) for r in oa), limit=evaluator.remaining_calls() - 2) + 2
+    ):
         return IGCResult("budget", parents, trace=trace)
+    rows = [decode(p1, p2, segments, r) for r in oa]  # Step 4
 
     res = evaluator.evaluate_batch(rows, phase="oa")  # Step 5
     byproducts = [

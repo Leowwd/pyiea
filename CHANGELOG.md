@@ -10,6 +10,10 @@ versions may change the public API.
 ### Added
 - `reproduce/imoea_zdt.py` runs two more NSGA-II baselines, `nsga2_pm0.1` and `nsga2_pm0.1var`, with the paper's quoted pm = 0.1 read per bit and per parameter, and reports the cover metric of IMOEA against each.
 
+### Fixed
+- `igc()` built every row of the orthogonal array before checking the call budget. With thousands of segments and long genomes (2,048 rows of a 42-million-bit genome are 80 GiB) that exhausted memory before the IGC was refused. The rows are now priced one at a time, the count stops once it passes the calls left, and the rows are built only if the IGC fits. The budget decision and every result are unchanged (`test_igc_budget_decision_is_exact`).
+- `Evaluator.n_uncached()` takes any iterable and an optional `limit`, and keeps a 16-byte digest per uncached genome instead of the genome itself.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added
