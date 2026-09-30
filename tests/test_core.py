@@ -258,6 +258,17 @@ def test_igc_refuses_a_too_large_oa_without_holding_it():
     assert peak < 10e6
 
 
+def test_igc_trace_records_the_segment_sizes():
+    rng = np.random.default_rng(3)
+    P = ic.FixedCardinalityProblem(40, 12)
+    ev = _ev(CountingObjective())
+    p1, y1, p2, y2 = _parents(CountingObjective(), P, rng, ev)
+    r = ic.igc(p1, y1, p2, y2, P, ev, rng, max_segments=5)
+    assert r.status == "applied"
+    assert r.trace["segment_sizes"] and sum(r.trace["segment_sizes"]) == r.trace["M"]
+    assert len(r.trace["segment_sizes"]) == r.trace["N"] <= 5
+
+
 def test_igc_false_never_calls_igc_and_true_does(monkeypatch):
     """The ablation must really skip Step 4: observe the calls, not just the output."""
     import pyiea.iea as iea_module

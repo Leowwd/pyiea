@@ -103,6 +103,7 @@ def igc(
     trace: dict[str, Any] = {
         "M": len(diff),
         "N": len(segments),
+        "segment_sizes": [len(seg) for seg in segments],
         "n_rows": len(oa),
         "calls_before": evaluator.counters["objective_calls"],
     }

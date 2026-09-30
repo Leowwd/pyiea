@@ -8,6 +8,7 @@ versions may change the public API.
 ## [Unreleased]
 
 ### Added
+- The IGC trace lists `segment_sizes` (the number of differing positions in each gene segment).
 - `IEAConfig(igc=False)`: an ablation that skips Step 4 (the intelligent gene collector) and keeps selection, elitism and mutation. It is an IEA-based variant, not IEA (`test_igc_false_never_calls_igc_and_true_does` observes that IGC is never called).
 - `reproduce/imoea_zdt.py` runs two more NSGA-II baselines, `nsga2_pm0.1` and `nsga2_pm0.1var`, with the paper's quoted pm = 0.1 read per bit and per parameter, and reports the cover metric of IMOEA against each.
 
