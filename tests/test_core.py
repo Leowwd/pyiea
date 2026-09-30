@@ -207,6 +207,57 @@ def test_budget_never_exceeded_and_no_partial_oa():
         ev.evaluate_batch([P.random_genome(np.random.default_rng(s)) for s in range(99)])
 
 
+def test_n_uncached_prices_the_batch_it_would_evaluate():
+    ev = _ev(CountingObjective())
+    a, b, c, dead = (freeze(np.eye(8, dtype=np.uint8)[i]) for i in (0, 1, 2, 3))
+    ev.is_valid = lambda g: g[3] == 0
+    ev.evaluate_batch([a])
+    batch = [a, b, b, c, dead]  # a cached, b twice, dead invalid: two calls
+    assert ev.n_uncached(batch) == 2
+    assert ev.n_uncached(iter(batch)) == 2  # any iterable, read once
+    assert ev.n_uncached(batch, limit=0) == 1  # stops as soon as the count exceeds the limit
+    before = ev.counters["objective_calls"]
+    ev.evaluate_batch(batch)
+    assert ev.counters["objective_calls"] - before == 2
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_igc_budget_decision_is_exact(seed):
+    """igc refuses exactly when the uncached OA rows plus the two children exceed the calls left."""
+    rng = np.random.default_rng(seed)
+    P = ic.BinaryProblem(24)
+    p1, p2 = P.random_genome(rng), P.random_genome(rng)
+    for max_calls in range(0, 40):
+        ev = _ev(CountingObjective(), max_calls=max_calls)
+        diff = np.flatnonzero(p1 != p2)
+        segments = P.divide(p1, p2, diff, None, np.random.default_rng(7))
+        if len(segments) < 2:
+            continue
+        rows = [decode(p1, p2, segments, r) for r in ic.generate_oa(len(segments))]
+        need = len({r.tobytes() for r in rows}) + 2
+        res = ic.igc(p1, (0.0,), p2, (0.0,), P, ev, np.random.default_rng(7))
+        if need > max_calls:
+            assert res.status == "budget" and ev.counters["objective_calls"] == 0
+        else:
+            assert res.status != "budget" and ev.counters["objective_calls"] <= need
+
+
+def test_igc_refuses_a_too_large_oa_without_holding_it():
+    """256 rows of 300 kB genomes would be 77 MB; the refusal must not build them."""
+    import tracemalloc
+
+    n = 300_000
+    p1, p2 = freeze(np.zeros(n)), freeze(np.ones(n))
+    ev = _ev(CountingObjective(), max_calls=10)
+    tracemalloc.start()
+    res = ic.igc(p1, (0.0,), p2, (0.0,), ic.BinaryProblem(n), ev, np.random.default_rng(0), max_segments=255)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert res.status == "budget" and res.trace["n_rows"] == 256
+    assert ev.counters["objective_calls"] == 0
+    assert peak < 10e6
+
+
 def test_exceptions_and_nonfinite_are_failures():
     def f(g):
         if g[0]:

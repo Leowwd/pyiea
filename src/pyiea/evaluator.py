@@ -17,7 +17,7 @@ import multiprocessing as mp
 import os
 import pickle
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeAlias
@@ -172,10 +172,23 @@ class Evaluator:
     def time_up(self) -> bool:
         return self.max_seconds is not None and self.elapsed() >= self.max_seconds
 
-    def n_uncached(self, genomes: Sequence[Genome]) -> int:
-        """Objective calls that evaluating ``genomes`` would need."""
-        keys = {genome_key(g) for g in genomes if self.is_valid is None or self.is_valid(g)}
-        return sum(k not in self.cache for k in keys)
+    def n_uncached(self, genomes: Iterable[Genome], limit: float | None = None) -> int:
+        """Objective calls that evaluating ``genomes`` would need.
+
+        The genomes are read one at a time and only a 16-byte digest of each uncached one is kept, so pricing a
+        long batch of long genomes does not hold the batch in memory. With ``limit`` the count stops as soon as
+        it exceeds ``limit``; the value returned is then greater than ``limit`` but not the full count.
+        """
+        seen: set[bytes] = set()
+        for g in genomes:
+            if self.is_valid is not None and not self.is_valid(g):
+                continue
+            k = genome_key(g)
+            if k not in self.cache:
+                seen.add(hashlib.blake2b(k, digest_size=16).digest())
+                if limit is not None and len(seen) > limit:
+                    break
+        return len(seen)
 
     def can_afford(self, n_calls: int) -> bool:
         return n_calls <= self.remaining_calls() and not self.time_up()
