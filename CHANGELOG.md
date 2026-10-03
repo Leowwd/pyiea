@@ -8,6 +8,7 @@ versions may change the public API.
 ## [Unreleased]
 
 ### Added
+- `IEA.step()` runs Steps 3-5 once (truncation, parent pairing with IGC, mutation) and returns a stop reason if an IGC does not fit the budget; `IEA.evaluate_population()` is the public name of the Step 2 evaluation. `optimize()` is the same loop built on them and behaves identically (`test_step_driver_equals_optimize`). A caller driving IEA with `step()` may reset `pop_y` and re-evaluate the population under another objective context between generations (`test_caller_can_change_the_objective_context_between_steps`); `best` and `history` then mix contexts, so such a caller keeps its own bookkeeping.
 - The IGC trace lists `segment_sizes` (the number of differing positions in each gene segment).
 - `IEAConfig(igc=False)`: an ablation that skips Step 4 (the intelligent gene collector) and keeps selection, elitism and mutation. It is an IEA-based variant, not IEA (`test_igc_false_never_calls_igc_and_true_does` observes that IGC is never called).
 - `reproduce/imoea_zdt.py` runs two more NSGA-II baselines, `nsga2_pm0.1` and `nsga2_pm0.1var`, with the paper's quoted pm = 0.1 read per bit and per parameter, and reports the cover metric of IMOEA against each.

@@ -53,10 +53,10 @@ All objectives are **minimized**. GPSIFF is **maximized**. A maximization object
 
 ## Section IV-C: IEA
 
-| Step | Code (`iea.IEA.optimize`) | Status |
+| Step | Code (`iea.IEA.optimize`; Steps 3-5 are `IEA.step()`, which `optimize` calls once per generation) | Status |
 |---|---|---|
 | 1 random initial population of N_pop | `problem.random_genome` | faithful |
-| 2 evaluate | `_evaluate_population`: only individuals that are new or changed since their last evaluation cost calls | faithful |
+| 2 evaluate | `evaluate_population` (`_evaluate_population`): only individuals that are new or changed since their last evaluation cost calls | faithful |
 | 3 truncation: the best `(1−ps)·N_pop` form the new population | **the worst `ps·N_pop` are replaced by copies of the best `ps·N_pop`**, so N_pop stays constant; `test_truncation_refill_copies_the_best` | **eng.** The paper does not say how N_pop is restored. Rounding: `int(ps·N_pop)`. The earlier research prototype refilled with random copies of survivors instead. |
 | 3 `I_best` | index 0 after sorting | faithful |
 | 4 randomly select `pc·N_pop` parents, including `I_best` | `int(pc·N_pop)` rounded down to an even number. I_best is parent 1 of the first pair, and the other parents are drawn without replacement and paired in draw order. Children replace their parents. | faithful. **eng:** rounding and the pairing order. |

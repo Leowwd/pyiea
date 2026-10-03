@@ -159,6 +159,15 @@ class IEA:
         y = self.pop_y[i]  # failed/unevaluated individuals rank last but never enter main effects
         return math.inf if y is None else y[0]
 
+    def evaluate_population(self) -> bool:
+        """Evaluate every individual whose objective is not known (``pop_y`` entry ``None``) and update ``best``.
+
+        Returns ``False`` if the budget stopped the batch before every individual was evaluated. A caller that
+        drives the loop with :meth:`step` can set ``pop_y`` entries to ``None`` and call this to re-score the
+        population under another objective context.
+        """
+        return self._evaluate_population()
+
     def _evaluate_population(self) -> bool:
         idx = [i for i, y in enumerate(self.pop_y) if y is None]
         res = self.evaluator.evaluate_batch(
@@ -222,8 +231,6 @@ class IEA:
         elif not self.pop:
             self.pop = [P.random_genome(self.rng) for _ in range(cfg.pop_size)]  # Step 1
             self.pop_y = [None] * cfg.pop_size
-        n_replace = int(cfg.ps * cfg.pop_size)
-        n_parents = int(cfg.pc * cfg.pop_size) // 2 * 2
         reason: str | None = None
 
         try:
@@ -244,52 +251,9 @@ class IEA:
                 reason = self._stop_reason(complete)  # Step 6, tested right after evaluation
                 if reason:
                     break
-
-                # Step 3: truncation selection. The paper leaves open how N_pop is restored;
-                # engineering choice: the worst ps*Npop are replaced by copies of the best ps*Npop
-                order = sorted(range(cfg.pop_size), key=self._key)
-                idx = order[: cfg.pop_size - n_replace] + order[:n_replace]
-                self.pop, self.pop_y = [self.pop[i] for i in idx], [self.pop_y[i] for i in idx]  # [0] = I_best
-
-                # Step 4: pc*Npop parents including I_best, which is parent 1 of the first pair
-                # (skipped in the igc=False ablation, which then draws no parents either)
-                chosen = (
-                    [0, *self.rng.choice(np.arange(1, cfg.pop_size), n_parents - 1, replace=False).tolist()]
-                    if cfg.igc
-                    else []
-                )
-                for a, b in zip(chosen[0::2], chosen[1::2], strict=True):
-                    ya, yb = self.pop_y[a], self.pop_y[b]
-                    if ya is None or yb is None:
-                        continue  # never recombine an individual without a valid objective
-                    r = igc(
-                        self.pop[a],
-                        ya,
-                        self.pop[b],
-                        yb,
-                        P,
-                        self.evaluator,
-                        self.rng,
-                        max_segments=cfg.max_segments,
-                        step10=cfg.step10,
-                    )
-                    self.igc_log.append({"generation": self.gen, "status": r.status, **r.trace})
-                    self._observe([*r.byproducts, *r.children])
-                    if r.status == "budget":
-                        reason = "time_limit" if self.evaluator.time_up() else "budget_exhausted"
-                        break
-                    (self.pop[a], self.pop_y[a]), (self.pop[b], self.pop_y[b]) = r.children
+                reason = self.step()  # Steps 3-5
                 if reason:
                     break
-
-                # Step 5: mutation, never applied to the current best individual
-                ib = min(range(cfg.pop_size), key=self._key)
-                for i in range(cfg.pop_size):
-                    if i != ib:
-                        g = P.mutate(self.pop[i], cfg.pm, self.rng)
-                        if g is not self.pop[i]:
-                            self.pop[i], self.pop_y[i] = g, None
-                self.gen += 1
         finally:
             self.evaluator.close()
 
@@ -304,6 +268,64 @@ class IEA:
             igc_log=self.igc_log,
             accounting=self.evaluator.summary(),
         )
+
+    def step(self) -> str | None:
+        """Run Steps 3-5 once: truncation selection, parent pairing with IGC, mutation; then ``gen += 1``.
+
+        The population must be fully evaluated (:meth:`evaluate_population`) before the call, and the mutated
+        individuals are left unevaluated (``pop_y`` entry ``None``); :meth:`optimize` evaluates them at the top of
+        its next iteration. Returns ``"budget_exhausted"`` or ``"time_limit"`` if an IGC does not fit the budget
+        (the generation then stops before mutation and ``gen`` is not advanced), otherwise ``None``.
+
+        A caller that drives IEA with ``step`` may change the objective context between generations: set the
+        ``pop_y`` entries to ``None`` and call :meth:`evaluate_population` under the new context. ``best`` and
+        ``history`` then mix contexts, so such a caller must keep its own bookkeeping.
+        """
+        cfg, P = self.cfg, self.problem
+        n_replace = int(cfg.ps * cfg.pop_size)
+        n_parents = int(cfg.pc * cfg.pop_size) // 2 * 2
+
+        # Step 3: truncation selection. The paper leaves open how N_pop is restored;
+        # engineering choice: the worst ps*Npop are replaced by copies of the best ps*Npop
+        order = sorted(range(cfg.pop_size), key=self._key)
+        idx = order[: cfg.pop_size - n_replace] + order[:n_replace]
+        self.pop, self.pop_y = [self.pop[i] for i in idx], [self.pop_y[i] for i in idx]  # [0] = I_best
+
+        # Step 4: pc*Npop parents including I_best, which is parent 1 of the first pair
+        # (skipped in the igc=False ablation, which then draws no parents either)
+        chosen = (
+            [0, *self.rng.choice(np.arange(1, cfg.pop_size), n_parents - 1, replace=False).tolist()] if cfg.igc else []
+        )
+        for a, b in zip(chosen[0::2], chosen[1::2], strict=True):
+            ya, yb = self.pop_y[a], self.pop_y[b]
+            if ya is None or yb is None:
+                continue  # never recombine an individual without a valid objective
+            r = igc(
+                self.pop[a],
+                ya,
+                self.pop[b],
+                yb,
+                P,
+                self.evaluator,
+                self.rng,
+                max_segments=cfg.max_segments,
+                step10=cfg.step10,
+            )
+            self.igc_log.append({"generation": self.gen, "status": r.status, **r.trace})
+            self._observe([*r.byproducts, *r.children])
+            if r.status == "budget":
+                return "time_limit" if self.evaluator.time_up() else "budget_exhausted"
+            (self.pop[a], self.pop_y[a]), (self.pop[b], self.pop_y[b]) = r.children
+
+        # Step 5: mutation, never applied to the current best individual
+        ib = min(range(cfg.pop_size), key=self._key)
+        for i in range(cfg.pop_size):
+            if i != ib:
+                g = P.mutate(self.pop[i], cfg.pm, self.rng)
+                if g is not self.pop[i]:
+                    self.pop[i], self.pop_y[i] = g, None
+        self.gen += 1
+        return None
 
     def _stop_reason(self, complete: bool) -> str | None:
         cfg, ev = self.cfg, self.evaluator
