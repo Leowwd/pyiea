@@ -15,6 +15,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .evaluator import Evaluator, Objectives
+from .exceptions import BudgetExhaustedError
 from .oa import generate_oa
 from .pareto import gpsiff
 from .problem import Genome, Problem, freeze
@@ -31,8 +32,10 @@ class IGCResult:
     Attributes:
         status: ``"applied"``, ``"identical"`` (parents equal), ``"not_divisible"``
             (fewer than two segments), ``"budget"`` (the OA plus two children do not
-            fit the budget; nothing was evaluated) or ``"failed_row"`` (a combination
-            or child failed; parents are returned).
+            fit the budget and nothing was evaluated, or the wall-time limit ran out while the
+            OA was being evaluated: then the evaluated rows are returned as by-products and
+            no child was built) or ``"failed_row"`` (a combination or child failed; parents
+            are returned).
         children: Two evaluated ``(genome, objectives)`` pairs.
         byproducts: Evaluated OA combinations.
         trace: Diagnostics (``M``, ``N``, ``n_rows``, call counts, ...).
@@ -73,6 +76,7 @@ def igc(
     multi_objective: bool = False,
     max_segments: int | None = None,
     step10: bool = True,
+    step10_p2: bool = True,
 ) -> IGCResult:
     """Recombine two evaluated parents with one IGC operation.
 
@@ -90,7 +94,10 @@ def igc(
         multi_objective: Use GPSIFF over the OA combinations as the response.
         max_segments: Cap on the number of segments (``bounded_segments`` variant).
         step10: Single-objective elitist Step 10: return the best two of the OA
-            combinations, C1 and C2.
+            combinations, C1, C2 and P2 (the paper's candidate set; P1 is OA row 1).
+        step10_p2: Include the second parent in the Step 10 candidate set, as the paper does. ``False``
+            restores the behavior of pyiea <= 0.2.0 (OA rows, C1 and C2 only), which can discard a second
+            parent that is better than everything kept; it exists to reproduce earlier results.
     """
     parents = [(p1, y1), (p2, y2)]
     diff = np.flatnonzero(p1 != p2)  # Step 1
@@ -116,7 +123,11 @@ def igc(
         return IGCResult("budget", parents, trace=trace)
     rows = [decode(p1, p2, segments, r) for r in oa]  # Step 4
 
-    res = evaluator.evaluate_batch(rows, phase="oa")  # Step 5
+    try:
+        res = evaluator.evaluate_batch(rows, phase="oa")  # Step 5
+    except BudgetExhaustedError:  # the wall-time limit ran out between the price check and the batch
+        trace["calls_after"] = evaluator.counters["objective_calls"]
+        return IGCResult("budget", parents, trace=trace)
     byproducts = [
         (g, r.objectives) for g, r in zip(rows, res, strict=True) if r is not None and r.objectives is not None
     ]
@@ -134,7 +145,11 @@ def igc(
     alt = best.copy()
     alt[j] = 3 - alt[j]
     c1, c2 = decode(p1, p2, segments, best), decode(p1, p2, segments, alt)  # Steps 8, 9
-    rc1, rc2 = evaluator.evaluate_batch([c1, c2], phase="child")
+    try:
+        rc1, rc2 = evaluator.evaluate_batch([c1, c2], phase="child")
+    except BudgetExhaustedError:  # the time limit ran out while the OA rows were evaluated: keep them, stop the run
+        trace["calls_after"] = evaluator.counters["objective_calls"]
+        return IGCResult("budget", parents, byproducts, trace)
     trace.update(calls_after=evaluator.counters["objective_calls"], med_factor=j)
     if rc1 is None or rc2 is None or rc1.objectives is None or rc2.objectives is None:
         return IGCResult("failed_row", parents, byproducts, trace)
@@ -148,10 +163,10 @@ def igc(
             c2=rc2.objectives[0],
             child_beats_rows=min(rc1.objectives[0], rc2.objectives[0]) < best_row,
         )
-        if step10:  # Step 10: best two of the n combinations (row 1 = P1), C1 and C2
+        if step10:  # Step 10: best two of the n combinations (row 1 = P1), C1, C2 and P2
             pool: list[Individual] = []
             seen: set[bytes] = set()
-            for g, y in byproducts + children:
+            for g, y in byproducts + children + ([(p2, y2)] if step10_p2 else []):
                 if g.tobytes() not in seen:
                     seen.add(g.tobytes())
                     pool.append((g, y))

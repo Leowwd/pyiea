@@ -23,6 +23,11 @@ __all__ = ["IEA", "IEAConfig", "IEAResult"]
 logger = logging.getLogger(__name__)
 
 
+def _count(p: float, n: int) -> int:
+    """``floor(p * n)`` that is not fooled by float products such as ``0.29 * 100 == 28.999999999999996``."""
+    return math.floor(p * n + 1e-9)
+
+
 def _check_probability(name: str, value: float) -> None:
     if not 0.0 <= value <= 1.0:
         raise ValueError(f"{name} must be in [0, 1], got {value}")
@@ -40,6 +45,9 @@ class IEAConfig:
         max_segments: ``None`` uses the paper's division size; an integer caps it
             (the ``bounded_segments`` variant, which must be reported as such).
         step10: Use IGC's optional elitist Step 10.
+        step10_p2: Step 10 chooses the best two of the OA combinations, C1, C2 **and P2**, as in the paper.
+            ``False`` restores the pre-0.3 behavior without P2 (an IEA-based variant); it exists to reproduce
+            earlier results.
         igc: ``False`` skips Step 4 (the intelligent gene collector): selection, elitism and mutation are
             unchanged but no parents are recombined. This is an ablation, an IEA-based variant that must not
             be reported as IEA. ``pc`` is still validated and is then unused.
@@ -56,6 +64,7 @@ class IEAConfig:
     pm: float = 0.05
     max_segments: int | None = None
     step10: bool = True
+    step10_p2: bool = True
     igc: bool = True
     max_generations: int | None = None
     target: float | None = None
@@ -67,7 +76,7 @@ class IEAConfig:
             raise ValueError(f"pop_size must be >= 2, got {self.pop_size}")
         for name in ("ps", "pc", "pm"):
             _check_probability(name, getattr(self, name))
-        if int(self.pc * self.pop_size) < 2:
+        if _count(self.pc, self.pop_size) < 2:
             raise ValueError("pc * pop_size must select at least one pair of parents")
         if self.max_segments is not None and self.max_segments < 2:
             raise ValueError(f"max_segments must be >= 2 or None, got {self.max_segments}")
@@ -240,8 +249,9 @@ class IEA:
                 complete = self._evaluate_population()  # Step 2
                 if self.gen == 0 and self.best is None:
                     self.evaluator.raise_if_all_failed(len(self.pop))  # fail fast instead of burning the budget
-                self.pop_best.append(min(map(self._key, range(cfg.pop_size))))
-                self._calls_log.append(self.evaluator.counters["objective_calls"])
+                if len(self.pop_best) <= self.gen:  # one entry per generation, also when optimize() is called again
+                    self.pop_best.append(min(map(self._key, range(cfg.pop_size))))
+                    self._calls_log.append(self.evaluator.counters["objective_calls"])
                 logger.debug(
                     "IEA gen %d: best %s, calls %d",
                     self.gen,
@@ -275,20 +285,25 @@ class IEA:
         The population must be fully evaluated (:meth:`evaluate_population`) before the call, and the mutated
         individuals are left unevaluated (``pop_y`` entry ``None``); :meth:`optimize` evaluates them at the top of
         its next iteration. Returns ``"budget_exhausted"`` or ``"time_limit"`` if an IGC does not fit the budget
-        (the generation then stops before mutation and ``gen`` is not advanced), otherwise ``None``.
+        (the generation then stops before mutation and ``gen`` is not advanced), otherwise ``None``. In that
+        stopped case the population has already been truncated and may hold the children of earlier IGCs of the
+        generation, so a caller that keeps stepping after raising the budget starts Step 3 from that state.
 
         A caller that drives IEA with ``step`` may change the objective context between generations: set the
         ``pop_y`` entries to ``None`` and call :meth:`evaluate_population` under the new context. ``best`` and
         ``history`` then mix contexts, so such a caller must keep its own bookkeeping.
         """
         cfg, P = self.cfg, self.problem
-        n_replace = int(cfg.ps * cfg.pop_size)
-        n_parents = int(cfg.pc * cfg.pop_size) // 2 * 2
+        n_replace = min(_count(cfg.ps, cfg.pop_size), cfg.pop_size - 1)  # at least one individual survives
+        n_parents = _count(cfg.pc, cfg.pop_size) // 2 * 2
 
         # Step 3: truncation selection. The paper leaves open how N_pop is restored;
-        # engineering choice: the worst ps*Npop are replaced by copies of the best ps*Npop
+        # engineering choice: the worst ps*Npop are replaced by copies of the best individuals, cycling through the
+        # survivors (for ps <= 0.5 these are the best ps*Npop, as before; for ps > 0.5 never an individual that
+        # truncation dropped)
         order = sorted(range(cfg.pop_size), key=self._key)
-        idx = order[: cfg.pop_size - n_replace] + order[:n_replace]
+        keep = cfg.pop_size - n_replace
+        idx = order[:keep] + [order[i % keep] for i in range(n_replace)]
         self.pop, self.pop_y = [self.pop[i] for i in idx], [self.pop_y[i] for i in idx]  # [0] = I_best
 
         # Step 4: pc*Npop parents including I_best, which is parent 1 of the first pair
@@ -310,6 +325,7 @@ class IEA:
                 self.rng,
                 max_segments=cfg.max_segments,
                 step10=cfg.step10,
+                step10_p2=cfg.step10_p2,
             )
             self.igc_log.append({"generation": self.gen, "status": r.status, **r.trace})
             self._observe([*r.byproducts, *r.children])

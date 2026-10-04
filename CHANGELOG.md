@@ -7,7 +7,17 @@ versions may change the public API.
 
 ## [Unreleased]
 
+### Changed
+- **Step 10 now includes P2**, as the paper does (p. 527: "the best two individuals from the n generated combinations, C1, C2, and P2"). Earlier versions chose from the OA rows, C1 and C2 only, which is wrong for N ≥ 3 (P2 is then not an OA row) and could throw away a second parent that was better than everything kept (about 2 % of IGC operations in the review's runs). This changes the trajectory of every `step10=True` run. `IEAConfig(step10_p2=False)` / `igc(step10_p2=False)` restore the old candidate set bit for bit (`test_legacy_mode_reproduces_the_pre_fix_trajectories_bit_for_bit`); report such a run as an IEA-based variant. The paper_map row that claimed P2 is not part of the set has been corrected.
+
+### Fixed
+- A wall-time limit (`max_seconds`) that ran out inside an IGC made `optimize()` raise `BudgetExhaustedError` and return no result (IEA and IMOEA). The IGC now returns status `"budget"` (keeping the OA rows it had evaluated as by-products) and the run stops with `stop_reason="time_limit"`.
+- Truncation selection with `ps > 0.5` refilled the population from individuals the truncation had dropped (ps = 0.8 behaved like ps = 0.2). The refill now cycles through the survivors; results for `ps ≤ 0.5` are unchanged. At least one individual always survives.
+- `int(ps * N_pop)` and `int(pc * N_pop)` truncated float products such as `0.29 * 100 = 28.999999999999996`; the counts now use `floor(p * N_pop + 1e-9)`.
+- Calling `optimize()` twice on the same `IEA` no longer appends a duplicate `pop_best` / stall-log entry.
+
 ### Added
+- `tests/test_reference_differential.py` compares the OA and the deterministic part of the IGC (rows, responses, main effects, smallest-difference factor, C1, C2, Step 10) with an independent reference written from the paper only (`tests/_reference_iea.py`), and `tests/test_review_fixes.py` pins the fixes above.
 - `IEA.step()` runs Steps 3-5 once (truncation, parent pairing with IGC, mutation) and returns a stop reason if an IGC does not fit the budget; `IEA.evaluate_population()` is the public name of the Step 2 evaluation. `optimize()` is the same loop built on them and behaves identically (`test_step_driver_equals_optimize`). A caller driving IEA with `step()` may reset `pop_y` and re-evaluate the population under another objective context between generations (`test_caller_can_change_the_objective_context_between_steps`); `best` and `history` then mix contexts, so such a caller keeps its own bookkeeping.
 - The IGC trace lists `segment_sizes` (the number of differing positions in each gene segment).
 - `IEAConfig(igc=False)`: an ablation that skips Step 4 (the intelligent gene collector) and keeps selection, elitism and mutation. It is an IEA-based variant, not IEA (`test_igc_false_never_calls_igc_and_true_does` observes that IGC is never called).
