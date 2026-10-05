@@ -7,6 +7,8 @@ versions may change the public API.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-05
+
 ### Changed
 - **Step 10 now includes P2**, as the paper does (p. 527: "the best two individuals from the n generated combinations, C1, C2, and P2"). Earlier versions chose from the OA rows, C1 and C2 only, which is wrong for N ≥ 3 (P2 is then not an OA row) and could throw away a second parent that was better than everything kept (about 2 % of IGC operations in the review's runs). This changes the trajectory of every `step10=True` run. `IEAConfig(step10_p2=False)` / `igc(step10_p2=False)` restore the old candidate set bit for bit (`test_legacy_mode_reproduces_the_pre_fix_trajectories_bit_for_bit`); report such a run as an IEA-based variant. The paper_map row that claimed P2 is not part of the set has been corrected.
 
