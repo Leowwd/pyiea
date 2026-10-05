@@ -334,9 +334,9 @@ class IMOEA:
 
     def _stop_reason(self, complete: bool) -> str | None:
         ev, cfg = self.evaluator, self.cfg
-        if not complete or ev.remaining_calls() <= 0:
+        if ev.remaining_calls() <= 0:
             return "budget_exhausted"
-        if ev.time_up():
+        if not complete or ev.time_up():  # a short batch with calls left can only be the wall-time limit
             return "time_limit"
         if cfg.max_generations is not None and self.gen >= cfg.max_generations:
             return "max_generations"

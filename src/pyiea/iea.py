@@ -345,9 +345,9 @@ class IEA:
 
     def _stop_reason(self, complete: bool) -> str | None:
         cfg, ev = self.cfg, self.evaluator
-        if not complete or ev.remaining_calls() <= 0:
+        if ev.remaining_calls() <= 0:
             return "budget_exhausted"
-        if ev.time_up():
+        if not complete or ev.time_up():  # a short batch with calls left can only be the wall-time limit
             return "time_limit"
         if cfg.target is not None and self.best and self.best[1][0] <= cfg.target:
             return "target_reached"

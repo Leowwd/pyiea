@@ -12,6 +12,7 @@ versions may change the public API.
 
 ### Fixed
 - A wall-time limit (`max_seconds`) that ran out inside an IGC made `optimize()` raise `BudgetExhaustedError` and return no result (IEA and IMOEA). The IGC now returns status `"budget"` (keeping the OA rows it had evaluated as by-products) and the run stops with `stop_reason="time_limit"`.
+- A run stopped by the wall-time limit while the population was being evaluated was labelled `budget_exhausted` even without a call budget; the stop reason is now `time_limit` (IEA and IMOEA).
 - Truncation selection with `ps > 0.5` refilled the population from individuals the truncation had dropped (ps = 0.8 behaved like ps = 0.2). The refill now cycles through the survivors; results for `ps ≤ 0.5` are unchanged. At least one individual always survives.
 - `int(ps * N_pop)` and `int(pc * N_pop)` truncated float products such as `0.29 * 100 = 28.999999999999996`; the counts now use `floor(p * N_pop + 1e-9)`.
 - Calling `optimize()` twice on the same `IEA` no longer appends a duplicate `pop_best` / stall-log entry.
